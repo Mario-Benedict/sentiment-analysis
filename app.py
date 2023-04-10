@@ -1,5 +1,5 @@
 from math import ceil
-from flask import Flask, flash, redirect, render_template, request
+from flask import Flask, flash, redirect, render_template, request, url_for
 from utils.helper import check_file_exists, is_valid_file
 from werkzeug.utils import secure_filename
 import polars as pl
@@ -25,24 +25,29 @@ def home():
 
     total_page = ceil(df.shape[0] / per_page)
 
-  i = 1
+  if page > total_page:
+    return redirect(f'dataset?page={total_page}', code=302)
+
+  if page < 1:
+    return redirect('dataset?page=1', code=302)
+
+  page_start = 1
   page_to_show = 3
   pages = []
-  while i <= total_page:
-    if i <= page_to_show or i >= total_page - page_to_show - 1 or (i >= page - 1 and i <= page + 1):
-      pages.append(i)
-      i += 1
+
+  while page_start <= total_page:
+    if page_start <= page_to_show or page_start >= total_page - page_to_show + 1 or (page_start >= page - 1 and page_start <= page + 1):
+      pages.append(page_start)
+      page_start += 1
 
       continue
 
     pages.append('...')
 
-    if i < page:
-      i = page - 1
+    if page_start < page:
+      page_start = page - 1
     else:
-      i = total_page - page_to_show - 1
-
-  print(pages)
+      page_start = total_page - page_to_show + 1
 
   if request.method == 'POST':
     if 'dataset' not in request.files:
