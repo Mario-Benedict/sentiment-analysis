@@ -1,6 +1,28 @@
 {% extends 'templates/base.html' %} {% block title %} {{ title }} {% endblock %}
-{% block content %}
+{% block content %} {% import 'templates/table.html' as component %}
 <div class="py-4 px-6 sm:ml-64">
-	<h1>preprocessing</h1>
+  <h2 class="text-xl pb-2 px-1 font-semibold">Hasil Pembersihan Data</h2>
+
+  {{ component.table(clean_df, clean_df_columns, page, per_page, total_page,
+  pages, url, rows) }}
+
+  <h2 class="text-xl pb-2 pt-4 px-1 font-semibold">
+    Hasil Penghapusan Punctuation
+  </h2>
+
+  {{ component.table(punctuation_df, punctuation_df_columns, page, per_page,
+  total_page, pages, url, rows) }}
+
+  <h2 class="text-xl pb-2 pt-4 px-1 font-semibold">
+    Hasil Penghapusan Stop Words
+  </h2>
+
+  {{ component.table(stop_words_df, stop_words_df_columns, page, per_page,
+  total_page, pages, url, rows) }}
+
+  <h2 class="text-xl pb-2 pt-4 px-1 font-semibold">Hasil Stemming</h2>
+
+  {{ component.table(stemmed_df, stemmed_df_columns, page, per_page, total_page,
+  pages, url, rows) }}
 </div>
 {% endblock %}

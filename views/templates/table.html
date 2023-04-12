@@ -1,0 +1,117 @@
+{% macro table(df, columns, page, per_page, total_page, pages, url, rows) %}
+<div class="relative overflow-x-auto shadow-md sm:rounded-lg">
+  <table
+    class="w-full text-sm text-left text-gray-500 dark:text-gray-400 text-center"
+  >
+    <thead
+      class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400"
+    >
+      <tr>
+        {% for col in columns %}
+        <th scope="col" class="p-6">{{ col | replace('_', ' ') }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+
+    <tbody class="bg-white divide-y dark:divide-gray-700 dark:bg-gray-800">
+      {% for col in df[per_page * (page - 1): per_page * (page - 1) + 10] %}
+      <tr
+        class="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+      >
+        {% for data in col.values() %}
+        <td class="px-6 py-4">{{ data }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <nav
+    class="flex items-center justify-between p-4"
+    aria-label="Table navigation"
+  >
+    <span class="text-sm font-normal text-gray-500 dark:text-gray-400"
+      >Tampil
+      <span class="font-semibold text-gray-900 dark:text-white"
+        >{{ ((page - 1) * per_page) + 1 if page > 1 else page }} - {{
+        per_page*page if per_page*page < rows else rows }}</span
+      >
+      dari
+      <span class="font-semibold text-gray-900 dark:text-white"
+        >{{ rows }}</span
+      ></span
+    >
+    <ul class="inline-flex items-center -space-x-px">
+      {% if page > 1 %}
+      <li>
+        <a
+          href="{{ url }}?page={{ page - 1 }}"
+          class="block px-3 py-2 ml-0 leading-tight text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+        >
+          <span class="sr-only">Previous</span>
+          <svg
+            class="w-5 h-5"
+            aria-hidden="true"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+              clip-rule="evenodd"
+            ></path>
+          </svg>
+        </a>
+      </li>
+      {% endif %} {% for i in pages %} {% if i == '...' %}
+      <li>
+        <span
+          class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300"
+          >...</span
+        >
+      </li>
+      {% elif i == page %}
+      <li>
+        <a
+          href="{{ url }}?page={{ i }}"
+          aria-current="page"
+          class="z-10 px-3 py-2 leading-tight text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-700 dark:text-white"
+          >{{ i }}</a
+        >
+      </li>
+      {% else %}
+      <li>
+        <a
+          href="{{ url }}?page={{ i }}"
+          class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+          >{{ i }}</a
+        >
+      </li>
+      {% endif %} {% endfor %} {% if page < total_page %}
+      <li>
+        <a
+          href="{{ url }}?page={{ page + 1 }}"
+          class="block px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+        >
+          <span class="sr-only">Next</span>
+          <svg
+            class="w-5 h-5"
+            aria-hidden="true"
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+              clip-rule="evenodd"
+            ></path>
+          </svg>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+</div>
+{% endmacro %}
