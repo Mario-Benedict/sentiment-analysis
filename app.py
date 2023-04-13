@@ -137,7 +137,8 @@ def home():
                           page=page,
                           per_page=PER_PAGE,
                           total_page=total_page,
-                          pages=pages
+                          pages=pages,
+                          url='dataset'
                         )
 
 @app.route('/preprocessing')
