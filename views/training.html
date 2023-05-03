@@ -24,8 +24,8 @@
         >
           <td class="p-6 text-gray-700 capitalize">presicion</td>
           <td class="p-6">{{ report['negative']['precision'] }}</td>
-          <td class="p-6">{{ report['positive']['precision'] }}</td>
           <td class="p-6">{{ report['neutral']['precision'] }}</td>
+          <td class="p-6">{{ report['positive']['precision'] }}</td>
         </tr>
 
         <tr
@@ -33,8 +33,8 @@
         >
           <td class="p-6 text-gray-700 capitalize">recall</td>
           <td class="p-6">{{ report['negative']['recall'] }}</td>
-          <td class="p-6">{{ report['positive']['recall'] }}</td>
           <td class="p-6">{{ report['neutral']['recall'] }}</td>
+          <td class="p-6">{{ report['positive']['recall'] }}</td>
         </tr>
       </tbody>
     </table>
@@ -57,12 +57,31 @@
 
   <div>
     <h2 class="py-2 px-1 capitalize text-lg font-semibold">Word Cloud</h2>
+    <div class="px-2">
+      <p class="text-center">Total Sentiment</p>
+      <img src="static/images/wordcloud.png" alt="wordcloud" />
+    </div>
 
-    <img
-      class="px-2"
-      src="static/images/wordcloud.png"
-      alt="confussion_matrix"
-    />
+    <div class="px-2">
+      <p class="text-center">Positive Sentiment</p>
+      <img
+        src="static/images/positive_wordcloud.png"
+        alt="positive_wordcloud"
+      />
+    </div>
+
+    <div class="px-2">
+      <p class="text-center">Negative Sentiment</p>
+      <img
+        src="static/images/negative_wordcloud.png"
+        alt="negative_wordcloud"
+      />
+    </div>
+
+    <div class="px-2">
+      <p class="text-center">Neutral Sentiment</p>
+      <img src="static/images/neutral_wordcloud.png" alt="neutral_wordcloud" />
+    </div>
   </div>
 </div>
 {% endblock%}

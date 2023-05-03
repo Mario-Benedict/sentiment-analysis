@@ -1,8 +1,10 @@
 import os
 import nltk
 import demoji
+import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
+import re
 
 from math import ceil
 from sklearn import metrics
@@ -13,27 +15,19 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from werkzeug.utils import secure_filename
 from sklearn.naive_bayes import MultinomialNB
-from flask_caching import Cache, CachedResponse
 from sklearn.model_selection import train_test_split
 from utils.helper import check_file_exists, is_valid_file
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
-from flask import Flask, flash, make_response, redirect, render_template, request, url_for
+from flask import Flask, flash, redirect, render_template, request, url_for
 
 nltk.download('stopwords')
 nltk.download('punkt')
 
 secret_key = dotenv_values('.env').get('SECRET_KEY')
 
-cache = Cache(config={
-  'CACHE_TYPE': 'simple',
-  'CACHE_DEFAULT_TIMEOUT': 600
-})
-
 app = Flask(__name__, template_folder='views')
-
-cache.init_app(app)
 
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['SECRET_KEY'] = secret_key
@@ -56,7 +50,7 @@ stop_words.extend(stop_factory)
 happy_emoticons = [
   ':-)', ':)', ';)', ':o)', ':]', ':3', ':c)', ':>', '=]', '8)', '=)', ':}',
   ':^)', ':-D', ':D', '8-D', '8D', 'x-D', 'xD', 'X-D', 'XD', '=-D', '=D',
-  '=-3', '=3', 'B^D', ':-))', ":'-)", ":')", ':*', ':^*', '>:P', ':-P',
+  '=-3', '=3', 'B^D', ':-))', ":'-)", ":')", ':', ':^', '>:P', ':-P',
   ':P', 'X-P', 'x-p', 'xp', 'XP', ':-p', ':p', '=p', ':-b', ':b', '>:)',
   '>;)', '>:-)', '<3'
 ]
@@ -77,8 +71,14 @@ def get_df(path, filename):
   total_page = 0
   if check_file_exists(path, filename):
     df = pl.read_csv(os.path.join(path, filename))
-    df = df.rename({'Date': 'date', 'User': 'user', 'Review': 'review', 'Rating ': 'rating'})
+    df = df.rename({'Date': 'date', 'User': 'user', 'Review': 'review', 'Rating ': 'rating', 'Label ': 'label'})
     df = df.drop('Number ')
+
+    df = df.drop_nulls()
+
+    df = df.with_columns([
+      pl.col('label').apply(lambda x: x.strip().lower().replace('possitive', 'positive'))
+    ])
 
     total_page = ceil(df.shape[0] / PER_PAGE)
 
@@ -105,23 +105,8 @@ def get_pagination(page, total_page):
 
   return pages
 
-def get_sentiment(review):
-  text = TextBlob(review)
-
-  text =  text.translate(from_lang='id', to='en')
-
-  polarity = text.sentiment.polarity
-
-  if polarity > 0:
-      return 'positive'
-  elif polarity < 0:
-      return 'negative'
-  else:
-      return 'neutral'
-
 @app.route('/dataset', methods=['GET', 'POST'])
 @app.route('/', methods=['GET', 'POST'])
-@cache.cached()
 def home():
   df, total_page = get_df(app.config['UPLOAD_FOLDER'], 'dataset.csv')
 
@@ -157,8 +142,7 @@ def home():
     flash('Invalid file extension', category='error')
     return redirect(request.url, code=302)
 
-  return CachedResponse(
-      response=make_response(render_template('index.html',
+  return render_template('index.html',
                           title='Sentiment Analysis',
                           df=df.to_dicts() if df is not None else None,
                           df_columns=df.columns if df is not None else None,
@@ -168,10 +152,9 @@ def home():
                           total_page=total_page,
                           pages=pages,
                           url='dataset'
-                        )), timeout=600)
+  )
 
 @app.route('/preprocessing')
-@cache.cached()
 def preprocessing():
   if check_file_exists(app.config['UPLOAD_FOLDER'], 'dataset.csv'):
     df, total_page = get_df(app.config['UPLOAD_FOLDER'], 'dataset.csv')
@@ -203,6 +186,7 @@ def preprocessing():
       'total_words': clean_df['review'].apply(lambda x: len(x.split())),
       'total_characters': clean_df['review'].str.lengths(),
       'words_rate': clean_df['review'].apply(lambda x: round(len(x) / len(x.split()), 2)),
+      'label': clean_df['label']
     })
 
     # remove punctuation
@@ -215,6 +199,7 @@ def preprocessing():
       pl.lit(punctuation_df['review'].apply(lambda x: len(x.split()))).alias('total_words'),
       pl.lit(punctuation_df['review'].str.lengths()).alias('total_characters'),
       pl.lit(punctuation_df['review'].apply(lambda x: round(len(x) / len(x.split()), 2))).alias('words_rate'),
+      pl.lit(clean_df['label']).apply(lambda x: x).alias('label')
     ])
 
     tokenized_df = pl.DataFrame({
@@ -231,6 +216,7 @@ def preprocessing():
       pl.lit(stop_words_df['review'].apply(lambda x: len(x.split()))).alias('total_words'),
       pl.lit(stop_words_df['review'].str.lengths()).alias('total_characters'),
       pl.lit(stop_words_df['review'].apply(lambda x: round(len(x) / len(x.split()), 2))).alias('words_rate'),
+      pl.lit(clean_df['label']).apply(lambda x: x).alias('label')
     ])
 
     stemmed_df = pl.DataFrame({
@@ -241,12 +227,12 @@ def preprocessing():
       pl.lit(stemmed_df['review'].apply(lambda x: len(x.split()))).alias('total_words'),
       pl.lit(stemmed_df['review'].str.lengths()).alias('total_characters'),
       pl.lit(stemmed_df['review'].apply(lambda x: round(len(x) / len(x.split()), 2))).alias('words_rate'),
+      pl.lit(clean_df['label']).apply(lambda x: x).alias('label')
     ])
 
     stemmed_df.write_csv('static/files/clean_dataset.csv')
 
-    return CachedResponse(
-      response=make_response(render_template('preprocessing.html',
+    return render_template('preprocessing.html',
                             title='Preprocessing',
                             clean_df=clean_df.to_dicts(),
                             clean_df_columns=clean_df.columns,
@@ -263,12 +249,10 @@ def preprocessing():
                             pages=pages,
                             url='preprocessing'
                           )
-                          ), timeout=600)
 
   return redirect(url_for('home'))
 
 @app.route('/spell-correction')
-@cache.cached()
 def spell_correction():
   df = None
   total_page = 0
@@ -296,16 +280,20 @@ def spell_correction():
       slang_map[i['slang']] = i['formal']
 
     df = df.with_columns([
-      pl.col('review').apply(lambda x: ' '.join([slang_map[word] if word in slang_map else word for word in x.split()])),
+      pl.col('review').apply(lambda x: ' '.join([slang_map[word] if word in slang_map else word for word in x.split()]).replace(r'\d+([a-zA-Z]+)?|\d*[a-zA-Z]+\d+', '')),
       pl.lit(df['review'].apply(lambda x: len(x.split()))).alias('total_words'),
       pl.lit(df['review'].str.lengths()).alias('total_characters'),
       pl.lit(df['review'].apply(lambda x: round(len(x) / len(x.split()), 2))).alias('words_rate'),
+      pl.lit(df['label']).apply(lambda x: x).alias('label')
+    ])
+
+    df = df.with_columns([
+      pl.col('review').apply(lambda x: re.sub('\d+([a-zA-Z]+)?|\d*[a-zA-Z]+\d', '', x))
     ])
 
     df.write_csv('static/files/clean_dataset.csv')
 
-    return CachedResponse(
-      response=make_response(render_template('spell_correction.html',
+    return render_template('spell_correction.html',
                             title='Spell Correction',
                             df=df.to_dicts(),
                             df_columns=df.columns,
@@ -315,47 +303,38 @@ def spell_correction():
                             total_page=total_page,
                             pages=pages,
                             url='spell-correction'
-                          )),
-                          timeout=600)
+                          )
 
   return redirect(url_for('home'))
 
 @app.route('/pembobotan')
-@cache.cached()
 def word_weighting():
   df = None
   total_page = 0
 
   if check_file_exists('static/files', 'clean_dataset.csv'):
     df = pl.read_csv('static/files/clean_dataset.csv')
+
     page = request.args.get('page', 1, type=int)
 
     tf_vectorizer = CountVectorizer()
-    tf = tf_vectorizer.fit_transform(df['review'])
+    tf_vectorizer_matrix = tf_vectorizer.fit_transform(df['review'])
 
-    # Compute IDF
-    idf_vectorizer = TfidfVectorizer(use_idf=True)
-    idf_vectorizer.fit_transform(df['review'])
-    idf = idf_vectorizer.idf_
+    idf_vectorizer = TfidfVectorizer()
+    idf_vectorizer_matrix = idf_vectorizer.fit_transform(df['review'])
 
-    # Compute TF-IDF
-    tfidf_vectorizer = TfidfVectorizer(use_idf=True)
-    tfidf = tfidf_vectorizer.fit_transform(df['review'])
+    vocab = idf_vectorizer.get_feature_names_out()
 
-    # Create a new dataframe to store the results
-    result_df = pl.DataFrame({ 'word': [], 'tf': [], 'idf': [], 'tf-idf': [] }, schema=[("word", str), ("tf", pl.Float64), ("idf", pl.Float64), ("tf-idf", pl.Float64)])
+    tf_values = tf_vectorizer_matrix.toarray().sum(axis=0)
+    idf_values =  idf_vectorizer.idf_
 
-    # Loop over all words in the vocabulary and compute TF, IDF, and TF-IDF values
-    vocab = tfidf_vectorizer.vocabulary_
+    tfidf_values = tf_values * idf_values
 
-    for word in vocab:
-        idx = vocab[word]
-        tf_values = tf[:, idx].toarray().flatten()
-        idf_value = idf[idx]
-        row = pl.DataFrame({"word": [word], "tf": [tf_values.mean()], "idf": [idf_value], "tf-idf": [(tf_values*idf_value).mean()] })
-        result_df.extend(row)
+    data = {'word': vocab, 'tf': tf_values, 'idf': idf_values, 'tf-idf': tfidf_values }
 
-    total_page = ceil(result_df.shape[0] / PER_PAGE)
+    tfidf_df = pl.DataFrame(data)
+
+    total_page = ceil(tfidf_df.shape[0] / PER_PAGE)
 
     pages = get_pagination(page, total_page)
 
@@ -365,48 +344,41 @@ def word_weighting():
     if page < 1:
       return redirect('pembobotan?page=1', code=302)
 
-    return CachedResponse(
-      response=make_response(render_template('word_weight.html',
+    return render_template('word_weight.html',
                             title='Pembobotan',
-                            df=result_df.to_dicts(),
-                            df_columns=result_df.columns,
-                            rows=result_df.shape[0],
+                            df=tfidf_df.to_dicts(),
+                            df_columns=tfidf_df.columns,
+                            rows=tfidf_df.shape[0],
                             page=page,
                             per_page=PER_PAGE,
                             total_page=total_page,
                             pages=pages,
                             url='pembobotan'
-                          )),
-                          timeout=600)
+                          )
 
-  return render_template('word_weight.html', title='Pembobotan')
+  return redirect(url_for('home'))
 
 @app.route('/training')
 def training():
   if check_file_exists('static/files', 'clean_dataset.csv'):
     df = pl.read_csv('static/files/clean_dataset.csv')
-    df = pl.DataFrame(df['review'])
-
-    df = df.with_columns([
-        pl.lit(df['review'].apply(get_sentiment)).alias('label')
-    ])
+    df = df.select([pl.col('review'), pl.col('label')])
 
     vec = CountVectorizer()
-    vec_transform = vec.fit_transform(df['review'])
 
-    x = vec_transform.toarray()
+    x = vec.fit_transform(df['review'])
     y = df['label']
 
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
     model = MultinomialNB()
     model.fit(x_train, y_train)
 
     y_pred = model.predict(x_test)
 
-    cm = metrics.confusion_matrix(y_test, y_pred, labels=['positive', 'negative', 'neutral'])
+    cm = metrics.confusion_matrix(y_test, y_pred, labels=['positive', 'neutral', 'negative'])
 
-    display = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['positive', 'negative', 'neutral'])
+    display = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['positive', 'neutral', 'negative'])
 
     display.plot()
     display.figure_.savefig('static/images/confusion_matrix.png')
@@ -423,13 +395,40 @@ def training():
 
     plt.clf()
 
+    df_positive = df.filter(pl.col('label') == 'positive')
+    df_negative = df.filter(pl.col('label') == 'negative')
+    df_neutral = df.filter(pl.col('label') == 'neutral')
+
+    positive_wordcloud_text = ' '.join(df_positive['review'])
+    negative_wordcloud_text = ' '.join(df_negative['review'])
+    neutral_wordcloud_text = ' '.join(df_neutral['review'])
+
+    positive_wordcloud = WordCloud().generate(positive_wordcloud_text)
+    negative_wordcloud = WordCloud().generate(negative_wordcloud_text)
+    neutral_wordcloud = WordCloud().generate(neutral_wordcloud_text)
+
+    plt.imshow(positive_wordcloud, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig('static/images/positive_wordcloud.png', bbox_inches='tight', dpi=250)
+    plt.clf()
+
+    plt.imshow(negative_wordcloud, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig('static/images/negative_wordcloud.png', bbox_inches='tight', dpi=250)
+    plt.clf()
+
+    plt.imshow(neutral_wordcloud, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig('static/images/neutral_wordcloud.png', bbox_inches='tight', dpi=250)
+    plt.clf()
+
     report = metrics.classification_report(y_test, y_pred, output_dict=True)
-  return CachedResponse(
-      response=make_response(render_template('training.html',
+
+    return render_template('training.html',
                                               title='Training',
                                               report=report
-                                            )),
-                                            timeout=600)
+                                            )
+  return redirect(url_for('home'))
 
 if __name__ == '__main__':
   app.run(debug=True, host='0.0.0.0')
